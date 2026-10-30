@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="ko" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RIDE & SHRED - 바이크 · 스노우보드 · 서핑</title>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+@import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+body{font-family:'Pretendard',-apple-system,'Noto Sans KR',sans-serif;background:#090a0f;color:#f1f5f9}
+::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-thumb{background:#27272a;border-radius:3px}
+.nav-active{background:#18181b;color:#f97316!important;border-left:3px solid #f97316;font-weight:700}
+.chip-active{background:#f97316!important;color:#fff!important;border-color:#f97316!important}
+.spd-active{background:#f97316!important;color:#fff!important;font-weight:700}
+input[type=range]{accent-color:#f97316;cursor:pointer}
+.player-inactive{cursor:none}.player-inactive .idle{opacity:0!important;pointer-events:none!important}
+@keyframes pl{0%,100%{opacity:1}50%{opacity:.4}}.live-pulse{animation:pl 1.5s infinite}
+.fld{width:100%;background:#09090b;border:1px solid #27272a;border-radius:.75rem;padding:.5rem .75rem;font-size:.75rem;color:#f1f5f9}.fld:focus{outline:none;border-color:#f97316}
+</style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+<header class="shrink-0 bg-[#090a0f]/95 border-b border-zinc-800/80 px-4 py-2.5 flex items-center justify-between gap-3 z-30">
+  <button onclick="goHome('ALL')" class="flex items-center gap-2.5 group">
+    <span class="bg-gradient-to-br from-orange-500 to-red-600 text-white font-black px-2.5 py-1 rounded-lg text-lg shadow-lg shadow-orange-500/20">R&S</span>
+    <span class="text-left hidden sm:block"><b class="font-extrabold text-xl text-white group-hover:text-orange-400 block leading-none">RIDE & SHRED</b><i class="not-italic text-[10px] text-zinc-500 font-semibold tracking-widest">MOTO · SNOW · SURF · LIVE</i></span>
+  </button>
+  <div class="hidden md:flex items-center w-96 relative">
+    <input id="searchInput" oninput="renderHome()" placeholder="기종, 스팟, 작성자 검색..." class="w-full bg-zinc-900 border border-zinc-800 rounded-xl pl-4 pr-9 py-2 text-xs focus:outline-none focus:border-orange-500">
+    <button onclick="clearSearch()" class="absolute right-3 text-zinc-500 hover:text-zinc-300 text-xs">✕</button>
+  </div>
+  <div class="flex items-center gap-2">
+    <button onclick="openBroadcast()" class="bg-red-600 hover:bg-red-700 text-white font-extrabold px-3 py-2 rounded-xl text-xs live-pulse">🔴 LIVE 송출</button>
+    <button onclick="openUpload()" class="bg-zinc-800 hover:bg-zinc-700 font-bold px-3 py-2 rounded-xl text-xs">+ 업로드</button>
+    <div id="authArea"></div>
+    <button onclick="openConfig()" title="서버 연동 설정" class="hidden sm:block p-2 bg-zinc-900 hover:bg-zinc-800 text-zinc-400 hover:text-white rounded-xl border border-zinc-800 text-xs">⚙️</button>
+  </div>
+</header>
+
+<div class="md:hidden px-4 py-2 border-b border-zinc-800/80">
+  <input id="searchInputM" oninput="renderHome()" placeholder="기종, 스팟, 작성자 검색..." class="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-2 text-xs focus:outline-none focus:border-orange-500">
+</div>
+
+<div class="flex-1 flex overflow-hidden">
+  <aside class="w-60 shrink-0 bg-[#0c0d14] border-r border-zinc-800/80 hidden md:flex flex-col overflow-y-auto p-4 space-y-6">
+    <nav class="space-y-1">
+      <p class="text-[11px] font-bold text-zinc-500 uppercase px-3 mb-2">메인 메뉴</p>
+      <button onclick="goHome('ALL')" id="nav-ALL" class="nav-btn w-full flex justify-between px-3 py-2.5 rounded-r-xl text-xs text-zinc-300 hover:bg-zinc-900"><span>🏠 홈 (전체 피드)</span><span id="totalBadge" class="text-[10px] bg-zinc-800 px-1.5 py-0.5 rounded text-zinc-400"></span></button>
+      <button onclick="scrollTo2('liveSection')" class="w-full flex justify-between px-3 py-2.5 rounded-r-xl text-xs text-red-400 font-bold hover:bg-zinc-900"><span>🔴 실시간 라이브</span><span id="liveBadge" class="text-[10px] bg-red-600 text-white px-1.5 py-0.5 rounded live-pulse"></span></button>
+      <button onclick="scrollTo2('shortsSection')" class="w-full text-left px-3 py-2.5 rounded-r-xl text-xs text-zinc-400 hover:bg-zinc-900">⚡ 쇼츠 클립</button>
+      <button onclick="goPhotos(true)" id="nav-PHOTO" class="nav-btn w-full text-left px-3 py-2.5 rounded-r-xl text-xs text-zinc-400 hover:bg-zinc-900">📸 포토</button>
+      <button onclick="goHome('MOTO')" id="nav-MOTO" class="nav-btn w-full text-left px-3 py-2.5 rounded-r-xl text-xs text-zinc-400 hover:bg-zinc-900">🏍️ 바이크 라이딩</button>
+      <button onclick="goHome('SNOW')" id="nav-SNOW" class="nav-btn w-full text-left px-3 py-2.5 rounded-r-xl text-xs text-zinc-400 hover:bg-zinc-900">🏂 스노우보드</button>
+      <button onclick="goHome('SURF')" id="nav-SURF" class="nav-btn w-full text-left px-3 py-2.5 rounded-r-xl text-xs text-zinc-400 hover:bg-zinc-900">🏄‍♂️ 서핑</button>
+    </nav>
+    <div class="bg-zinc-900/70 border border-zinc-800 rounded-2xl p-3.5 space-y-2.5">
+      <div class="flex justify-between"><b class="text-xs text-white">🛠️ 내 장비 차고</b><button onclick="editGarage()" class="text-[11px] text-orange-400 hover:underline">변경</button></div>
+      <div id="garageBox" class="space-y-1.5 text-xs"></div>
+    </div>
+    <div>
+      <p class="text-[11px] font-bold text-zinc-500 uppercase px-2 mb-2">📍 인기 스팟</p>
+      <div class="flex flex-wrap gap-1.5">
+        <button onclick="tagSearch('유명산')" class="text-[11px] bg-zinc-900 text-zinc-300 border border-zinc-800 px-2.5 py-1 rounded-lg hover:border-orange-500">#유명산와인딩</button>
+        <button onclick="tagSearch('휘닉스')" class="text-[11px] bg-zinc-900 text-zinc-300 border border-zinc-800 px-2.5 py-1 rounded-lg hover:border-orange-500">#휘닉스파크</button>
+        <button onclick="tagSearch('양양')" class="text-[11px] bg-zinc-900 text-zinc-300 border border-zinc-800 px-2.5 py-1 rounded-lg hover:border-orange-500">#양양죽도해변</button>
+      </div>
+    </div>
+  </aside>
+
+  <main id="scrollArea" class="flex-1 overflow-y-auto p-4 md:p-6">
+
+    <!-- 홈 -->
+    <div id="homeView" class="max-w-[1600px] mx-auto space-y-8">
+      <div class="flex items-center justify-between flex-wrap gap-3 border-b border-zinc-800/80 pb-4">
+        <div class="flex gap-2 overflow-x-auto">
+          <button onclick="goHome('ALL')" id="chip-ALL" class="cat-chip px-3.5 py-1.5 rounded-lg text-xs font-bold bg-zinc-900 text-zinc-300 border border-zinc-800 whitespace-nowrap">전체 보기</button>
+          <button onclick="goHome('MOTO')" id="chip-MOTO" class="cat-chip px-3.5 py-1.5 rounded-lg text-xs font-bold bg-zinc-900 text-zinc-300 border border-zinc-800 whitespace-nowrap">🏍️ 바이크</button>
+          <button onclick="goHome('SNOW')" id="chip-SNOW" class="cat-chip px-3.5 py-1.5 rounded-lg text-xs font-bold bg-zinc-900 text-zinc-300 border border-zinc-800 whitespace-nowrap">🏂 스노우보드</button>
+          <button onclick="goHome('SURF')" id="chip-SURF" class="cat-chip px-3.5 py-1.5 rounded-lg text-xs font-bold bg-zinc-900 text-zinc-300 border border-zinc-800 whitespace-nowrap">🏄‍♂️ 서핑</button>
+        </div>
+        <span id="countInfo" class="text-xs text-zinc-400"></span>
+      </div>
+      <section id="liveSection" class="space-y-4">
+        <div class="flex justify-between items-center">
+          <div class="flex items-center gap-2.5"><span class="bg-red-600 text-white font-black px-2 py-0.5 rounded-md text-xs live-pulse">🔴 LIVE</span><h2 class="text-base font-extrabold">현장 실시간 라이브 방송</h2></div>
+          <button onclick="openBroadcast()" class="text-xs font-bold text-red-400 hover:text-red-300">+ 나도 라이브 송출하기</button>
+        </div>
+        <div id="liveGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5"></div>
+      </section>
+      <hr class="border-zinc-800/80">
+      <section id="photoRowSec" class="space-y-4">
+        <div class="flex items-center justify-between"><h2 class="text-base font-extrabold">📸 베스트 포토</h2><button onclick="goPhotos(true)" class="text-xs font-bold text-orange-400 hover:text-orange-300">포토 전체 보기 →</button></div>
+        <div id="photoRow" class="flex gap-3 overflow-x-auto pb-2"></div>
+      </section>
+      <hr class="border-zinc-800/80">
+      <section id="shortsSection" class="space-y-4">
+        <div class="flex items-center gap-2.5"><span class="bg-gradient-to-br from-red-500 to-orange-500 text-white font-black px-2 py-0.5 rounded-md text-xs">⚡ SHORTS</span><h2 class="text-base font-extrabold">하이라이트 쇼츠 클립</h2></div>
+        <div id="shortsGrid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4"></div>
+      </section>
+      <hr class="border-zinc-800/80">
+      <section class="space-y-4">
+        <h2 class="text-base font-extrabold">🎬 풀런 · 투어 · 세션 영상</h2>
+        <div id="videoGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"></div>
+      </section>
+    </div>
+
+    <!-- 영상 상세 -->
+    <div id="watchView" class="hidden max-w-[1500px] mx-auto space-y-4">
+      <button onclick="goHome(cur)" class="text-xs font-bold text-orange-400 hover:text-orange-300 bg-zinc-900/60 border border-zinc-800 px-4 py-2.5 rounded-xl">← 목록으로 돌아가기</button>
+      <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+        <section class="xl:col-span-8 flex flex-col gap-4">
+          <div id="playerBox" onmousemove="wake()" class="relative bg-black rounded-2xl overflow-hidden border border-zinc-800 shadow-2xl aspect-video">
+            <video id="mainPlayer" class="absolute inset-0 w-full h-full object-contain cursor-pointer" onclick="togglePlay()" playsinline></video>
+            <div class="idle absolute top-0 inset-x-0 z-20 p-3 bg-gradient-to-b from-black/80 to-transparent flex justify-between pointer-events-none transition-opacity duration-300">
+              <div class="flex gap-2"><span id="resBadge" class="bg-orange-500 text-white text-xs font-black px-2.5 py-1 rounded-md"></span><span id="catBadge" class="bg-zinc-800/80 text-xs font-semibold px-2.5 py-1 rounded-md border border-zinc-700"></span></div>
+              <span id="speedBadge" class="bg-black/70 px-3 py-1 rounded-full border border-zinc-700 text-xs font-bold text-orange-400">1x</span>
+            </div>
+            <div id="centerIcon" onclick="togglePlay()" class="absolute inset-0 z-10 flex items-center justify-center cursor-pointer"><div class="w-16 h-16 rounded-full bg-orange-500/90 flex items-center justify-center text-2xl shadow-2xl">▶</div></div>
+            <div class="idle absolute bottom-0 inset-x-0 z-20 p-3 bg-gradient-to-t from-black/95 via-black/70 to-transparent space-y-2 transition-opacity duration-300">
+              <input type="range" id="timeline" min="0" max="100" value="0" step="0.1" oninput="onSeek(this.value)" class="w-full h-1.5">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-3">
+                  <button id="btnPlay" onclick="togglePlay()" class="text-white hover:text-orange-400 font-bold text-base">▶</button>
+                  <button onclick="skip(-5)" class="text-zinc-300 hover:text-white text-xs font-semibold">⏪ 5초</button>
+                  <button onclick="skip(5)" class="text-zinc-300 hover:text-white text-xs font-semibold">5초 ⏩</button>
+                  <span id="timeText" class="text-xs text-zinc-300 font-mono">0:00 / 0:00</span>
+                </div>
+                <div id="speedBtns" class="flex items-center gap-1.5"></div>
+              </div>
+            </div>
+          </div>
+          <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 space-y-3">
+            <div id="tags" class="flex flex-wrap gap-2"></div>
+            <h1 id="wTitle" class="text-lg font-bold text-white"></h1>
+            <p id="wMeta" class="text-xs text-zinc-400"></p>
+            <div class="bg-zinc-950/70 rounded-xl p-3 text-xs">
+              <div id="descText" class="whitespace-pre-line text-zinc-300 leading-relaxed overflow-hidden break-words" style="max-height:3.3em"></div>
+              <button id="descBtn" onclick="toggleDesc()" class="hidden mt-1.5 font-bold text-zinc-400 hover:text-white">더보기</button>
+            </div>
+          </div>
+          <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 space-y-3">
+            <h3 class="text-sm font-bold">💬 타임스탬프 댓글 <span id="cmtCount" class="text-orange-400"></span></h3>
+            <div class="flex gap-2">
+              <input id="cmtInput" onkeydown="if(event.key==='Enter')addComment()" placeholder="현재 재생 시점에 댓글 남기기..." class="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-orange-500">
+              <button onclick="addComment()" class="bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-4 rounded-xl">등록</button>
+            </div>
+            <div id="cmtList" class="space-y-2"></div>
+          </div>
+        </section>
+        <aside class="xl:col-span-4 space-y-3">
+          <h2 class="text-sm font-bold">🎬 다음 추천 클립</h2>
+          <div id="recList" class="flex flex-col gap-3"></div>
+        </aside>
+      </div>
+    </div>
+
+    <!-- 포토 -->
+    <div id="photoView" class="hidden max-w-[1600px] mx-auto space-y-4">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/80 pb-4">
+        <div class="flex items-center gap-3"><button onclick="goHome('ALL')" class="text-xs font-bold text-orange-400 bg-zinc-900/60 border border-zinc-800 px-4 py-2 rounded-xl">← 홈</button><h2 class="text-base font-extrabold">📸 포토 <span id="photoCount" class="text-orange-400 text-sm"></span></h2></div>
+        <button onclick="openPhUpload()" class="bg-orange-500 hover:bg-orange-600 text-white font-bold px-4 py-2 rounded-xl text-xs">+ 사진 올리기</button>
+      </div>
+      <div class="flex gap-2 overflow-x-auto">
+        <button onclick="setPCat('ALL')" data-c="ALL" class="pcat px-3.5 py-1.5 rounded-lg text-xs font-bold bg-zinc-900 text-zinc-300 border border-zinc-800 whitespace-nowrap">전체</button>
+        <button onclick="setPCat('MOTO')" data-c="MOTO" class="pcat px-3.5 py-1.5 rounded-lg text-xs font-bold bg-zinc-900 text-zinc-300 border border-zinc-800 whitespace-nowrap">🏍️ 바이크</button>
+        <button onclick="setPCat('SNOW')" data-c="SNOW" class="pcat px-3.5 py-1.5 rounded-lg text-xs font-bold bg-zinc-900 text-zinc-300 border border-zinc-800 whitespace-nowrap">🏂 스노우보드</button>
+        <button onclick="setPCat('SURF')" data-c="SURF" class="pcat px-3.5 py-1.5 rounded-lg text-xs font-bold bg-zinc-900 text-zinc-300 border border-zinc-800 whitespace-nowrap">🏄‍♂️ 서핑</button>
+      </div>
+      <div id="ptypeChips" class="flex flex-wrap gap-2"></div>
+      <div id="photoGrid" class="columns-2 md:columns-3 xl:columns-4 gap-4"></div>
+    </div>
+
+    <!-- 내 정보 -->
+    <div id="profileView" class="hidden max-w-5xl mx-auto space-y-5">
+      <div class="flex items-center justify-between border-b border-zinc-800/80 pb-4">
+        <div class="flex items-center gap-3"><button onclick="goHome('ALL')" class="text-xs font-bold text-orange-400 bg-zinc-900/60 border border-zinc-800 px-4 py-2 rounded-xl">← 홈</button><h2 class="text-base font-extrabold">👤 내 정보 설정</h2></div>
+        <button onclick="saveProfile()" class="bg-orange-500 hover:bg-orange-600 text-white font-bold px-5 py-2 rounded-xl text-xs">저장</button>
+      </div>
+      <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+        <div id="profForm" class="lg:col-span-3 space-y-5"></div>
+        <aside class="lg:col-span-2"><div class="lg:sticky lg:top-0"><p class="text-[11px] font-bold text-zinc-500 mb-2">내 프로필 미리보기</p><div id="profPreview" class="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-5 space-y-4"></div></div></aside>
+      </div>
+    </div>
+
+    <!-- 라이브 시청 -->
+    <div id="liveView" class="hidden max-w-[1500px] mx-auto space-y-4">
+      <div class="flex justify-between items-center bg-zinc-900/60 border border-zinc-800 px-4 py-2.5 rounded-xl">
+        <button onclick="goHome('ALL')" class="text-xs font-bold text-red-400 hover:text-red-300">← 라이브 목록으로</button>
+        <span class="text-xs text-red-500 font-extrabold live-pulse">🔴 실시간 시청 중</span>
+      </div>
+      <div class="grid grid-cols-1 xl:grid-cols-12 gap-6">
+        <section class="xl:col-span-8 space-y-4">
+          <div class="relative bg-black rounded-2xl overflow-hidden border border-zinc-800 aspect-video">
+            <video id="liveVideo" class="w-full h-full object-contain" autoplay playsinline controls></video>
+            <span class="absolute top-4 left-4 bg-red-600 text-white text-xs font-black px-3 py-1 rounded-full live-pulse">🔴 LIVE</span>
+          </div>
+          <div class="bg-zinc-900/50 border border-zinc-800 rounded-xl p-4 space-y-2">
+            <h1 id="lTitle" class="text-lg font-bold"></h1>
+            <p id="lMeta" class="text-xs text-zinc-400"></p>
+          </div>
+        </section>
+        <aside class="xl:col-span-4 flex flex-col bg-zinc-900/80 border border-zinc-800 rounded-2xl p-4 h-[500px]">
+          <h3 class="text-xs font-extrabold border-b border-zinc-800 pb-2 mb-3">💬 라이브 실시간 채팅</h3>
+          <div id="chatBox" class="flex-1 overflow-y-auto space-y-2 pr-1 text-xs"></div>
+          <div class="pt-3 border-t border-zinc-800 flex gap-2">
+            <input id="chatInput" onkeydown="if(event.key==='Enter')sendChat()" placeholder="실시간 응원 채팅..." class="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs focus:outline-none">
+            <button onclick="sendChat()" class="bg-red-600 hover:bg-red-700 text-white text-xs font-bold px-4 rounded-xl">전송</button>
+          </div>
+        </aside>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- 라이브 송출 모달 -->
+<div id="broadcastModal" class="fixed inset-0 z-50 hidden bg-black/90 items-center justify-center p-4">
+  <div class="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-lg w-full p-6 space-y-3">
+    <div class="flex justify-between items-center border-b border-zinc-800 pb-3"><h3 class="font-extrabold">🔴 실시간 라이브 송출</h3><button onclick="closeBroadcast(true)" class="text-zinc-400 hover:text-white">✕</button></div>
+    <div class="aspect-video bg-black rounded-2xl overflow-hidden border border-zinc-700"><video id="previewEl" class="w-full h-full object-cover" autoplay muted playsinline></video></div>
+    <input id="bTitle" placeholder="방송 제목 (예: 북악 야간 투어 생중계)" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs">
+    <div class="grid grid-cols-2 gap-3">
+      <select id="bCat" class="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs"><option value="MOTO">🏍️ 바이크</option><option value="SNOW">🏂 스노우보드</option><option value="SURF">🏄‍♂️ 서핑</option></select>
+      <input id="bSpot" placeholder="스팟명" class="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs">
+    </div>
+    <p class="text-[11px] text-zinc-500">카메라 권한이 없으면 샘플 영상으로 송출됩니다. (프로토타입)</p>
+    <div class="flex justify-end gap-2"><button onclick="closeBroadcast(true)" class="px-4 py-2 rounded-xl text-xs bg-zinc-800">취소</button><button onclick="startBroadcast()" class="px-6 py-2 rounded-xl text-xs font-extrabold bg-red-600 hover:bg-red-700">🔴 라이브 시작</button></div>
+  </div>
+</div>
+
+<!-- 쇼츠 모달 -->
+<div id="shortsModal" class="fixed inset-0 z-50 hidden bg-black/90 items-center justify-center p-4" onclick="if(event.target===this)closeShorts()">
+  <div class="relative w-[350px] max-w-full aspect-[9/16] bg-zinc-950 rounded-3xl overflow-hidden border border-zinc-700 shadow-2xl">
+    <video id="shortsVideo" class="absolute inset-0 w-full h-full object-cover" loop playsinline controls></video>
+    <div class="absolute top-0 inset-x-0 z-10 p-4 bg-gradient-to-b from-black/80 to-transparent flex justify-between items-start gap-3">
+      <div><span class="bg-red-600 text-white text-[10px] font-black px-2 py-0.5 rounded">SHORTS</span><p id="shortsTitle" class="text-xs font-bold mt-2 line-clamp-2"></p></div>
+      <button onclick="closeShorts()" class="shrink-0 w-8 h-8 rounded-full bg-black/70 text-white">✕</button>
+    </div>
+  </div>
+</div>
+
+<!-- 업로드 모달 -->
+<div id="uploadModal" class="fixed inset-0 z-50 hidden bg-black/80 items-center justify-center p-4">
+  <div class="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full p-6 space-y-3">
+    <h3 class="font-bold">영상 업로드</h3>
+    <input type="file" id="upFile" accept="video/*" class="w-full text-xs bg-zinc-950 p-2 rounded-xl">
+    <input id="upTitle" placeholder="제목" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs">
+    <div><textarea id="upDesc" rows="5" maxlength="2000" placeholder="설명 (더보기란에 표시됩니다)&#10;예)&#10;0:30 코너 진입&#10;1:10 탈출 가속&#10;#유명산 #와인딩" class="fld resize-none"></textarea><p class="text-[10px] text-zinc-500 mt-1">0:30 처럼 시간을 적으면 클릭해서 이동하고, #해시태그와 링크도 자동으로 연결됩니다.</p></div>
+    <div class="grid grid-cols-2 gap-3">
+      <select id="upCat" class="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs"><option value="MOTO">🏍️ 바이크</option><option value="SNOW">🏂 스노우보드</option><option value="SURF">🏄‍♂️ 서핑</option></select>
+      <input id="upSpot" placeholder="스팟명" class="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs">
+    </div>
+    <div class="flex justify-end gap-2"><button onclick="closeUpload()" class="px-4 py-2 bg-zinc-800 text-xs rounded-lg">닫기</button><button onclick="submitUpload()" class="px-4 py-2 bg-orange-500 text-xs font-bold rounded-lg">업로드</button></div>
+  </div>
+</div>
+
+<div id="userModal" class="fixed inset-0 z-[55] hidden bg-black/80 items-center justify-center p-4" onclick="if(event.target===this)closeUser()">
+  <div class="relative bg-zinc-900 border border-zinc-800 rounded-3xl max-w-sm w-full p-6 max-h-[90vh] overflow-y-auto">
+    <button onclick="closeUser()" class="absolute top-3 right-3 w-8 h-8 rounded-full bg-zinc-800 hover:bg-zinc-700 text-sm">✕</button>
+    <div id="userCard" class="space-y-4"></div>
+  </div>
+</div>
+
+<div id="loginModal" class="fixed inset-0 z-50 hidden bg-black/80 items-center justify-center p-4" onclick="if(event.target===this)closeLogin()">
+  <div class="bg-zinc-900 border border-zinc-800 rounded-3xl max-w-sm w-full p-6 space-y-3">
+    <div class="text-center space-y-1">
+      <span class="inline-block bg-gradient-to-br from-orange-500 to-red-600 text-white font-black px-2.5 py-1 rounded-lg text-lg">R&S</span>
+      <h3 class="font-extrabold text-lg pt-2">RIDE & SHRED 로그인</h3>
+      <p class="text-xs text-zinc-400">업로드 · 라이브 송출 · 좋아요 · 댓글은 로그인 후 이용할 수 있어요</p>
+    </div>
+    <button onclick="loginWith('kakao')" class="w-full py-3 rounded-xl text-sm font-bold bg-[#FEE500] text-black hover:brightness-95">💬 카카오로 시작하기</button>
+    <button onclick="loginWith('naver')" class="w-full py-3 rounded-xl text-sm font-bold bg-[#03C75A] text-white hover:brightness-95">N 네이버로 시작하기</button>
+    <button onclick="loginWith('google')" class="w-full py-3 rounded-xl text-sm font-bold bg-white text-zinc-800 hover:brightness-95">G Google로 시작하기</button>
+    <p id="loginNote" class="text-[11px] text-zinc-500 text-center leading-relaxed"></p>
+    <button onclick="closeLogin()" class="w-full text-xs text-zinc-400 hover:text-white py-1">둘러보기</button>
+  </div>
+</div>
+
+<div id="cfgModal" class="fixed inset-0 z-50 hidden bg-black/80 items-center justify-center p-4">
+  <div class="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full p-6 space-y-3">
+    <h3 class="font-bold">⚙️ 서버 연동 설정 (Supabase)</h3>
+    <input id="cfgUrl" placeholder="Project URL (https://xxxx.supabase.co)" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs">
+    <input id="cfgKey" placeholder="anon public key" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs">
+    <p class="text-[11px] text-zinc-500 leading-relaxed">Supabase 대시보드 → Authentication → Providers에서 Google·Kakao를 켜고 Redirect URL에 이 페이지 주소를 등록하세요. 파일을 더블클릭해서 여는 방식(file://)에서는 OAuth가 동작하지 않으니 로컬 서버나 호스팅 주소에서 열어야 합니다. 네이버는 Supabase 기본 제공자가 아니라서 지금은 데모 로그인만 됩니다.</p>
+    <div class="flex justify-between gap-2"><button onclick="clearConfig()" class="px-3 py-2 bg-zinc-800 hover:bg-red-600 text-xs rounded-lg">연동 해제</button><div class="flex gap-2"><button onclick="closeConfig()" class="px-4 py-2 bg-zinc-800 text-xs rounded-lg">닫기</button><button onclick="saveConfig()" class="px-4 py-2 bg-orange-500 text-xs font-bold rounded-lg">저장</button></div></div>
+  </div>
+</div>
+
+<div id="lightbox" class="fixed inset-0 z-50 hidden flex-col md:flex-row items-center justify-center gap-4 p-4 bg-black/95 overflow-y-auto" onclick="if(event.target===this)closeLB()">
+  <button onclick="closeLB()" class="fixed top-4 right-4 z-10 w-9 h-9 rounded-full bg-zinc-800 hover:bg-zinc-700">✕</button>
+  <button onclick="lbMove(-1)" class="fixed left-3 top-1/2 z-10 w-10 h-10 rounded-full bg-zinc-800/90 hover:bg-orange-500 text-xl">‹</button>
+  <button onclick="lbMove(1)" class="fixed right-3 top-1/2 z-10 w-10 h-10 rounded-full bg-zinc-800/90 hover:bg-orange-500 text-xl">›</button>
+  <div class="flex flex-col items-center gap-3 max-w-full md:max-w-[68vw]"><div id="lbStage"></div><div id="lbThumbs" class="flex gap-2"></div></div>
+  <div id="lbInfo" class="w-full md:w-72 shrink-0 bg-zinc-900 border border-zinc-800 rounded-2xl p-5"></div>
+</div>
+
+<div id="phUpModal" class="fixed inset-0 z-50 hidden bg-black/80 items-center justify-center p-4">
+  <div class="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full p-6 space-y-3 max-h-[92vh] overflow-y-auto">
+    <h3 class="font-bold">📸 사진 업로드</h3>
+    <input type="file" id="phFile" accept="image/*" multiple onchange="phChanged()" class="w-full text-xs bg-zinc-950 p-2 rounded-xl">
+    <label id="phSetRow" class="hidden items-center gap-2 text-xs text-zinc-300 bg-zinc-950 rounded-xl px-3 py-2"><input type="checkbox" id="phSetChk" checked class="accent-orange-500"><span id="phSetTxt"></span></label>
+    <input id="phTitle" placeholder="제목" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs">
+    <div class="grid grid-cols-2 gap-3">
+      <select id="phCat" onchange="fillPhTypes()" class="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs"><option value="MOTO">🏍️ 바이크</option><option value="SNOW">🏂 스노우보드</option><option value="SURF">🏄‍♂️ 서핑</option></select>
+      <select id="phType" class="bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs"></select>
+    </div>
+    <input id="phSpot" placeholder="스팟명" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs">
+    <input id="phSet" placeholder="촬영 설정 (예: 1/60s · f/8 · ISO 100)" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs">
+    <input id="phModel" placeholder="모델 (찍힌 사람, 선택)" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs">
+    <div class="flex justify-end gap-2"><button onclick="closePhUpload()" class="px-4 py-2 bg-zinc-800 text-xs rounded-lg">닫기</button><button onclick="submitPhoto()" class="px-4 py-2 bg-orange-500 text-xs font-bold rounded-lg">업로드</button></div>
+  </div>
+</div>
+
+<div id="toast" class="fixed bottom-5 right-5 z-[60] hidden bg-zinc-900 border border-red-500/60 px-4 py-2.5 rounded-xl shadow-2xl text-xs font-bold"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const B = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/';
+const CATS = {
+  MOTO: {icon:'🏍️', name:'바이크', cls:'bg-orange-500 text-white', grad:'from-orange-700 to-zinc-900'},
+  SNOW: {icon:'🏂', name:'스노우보드', cls:'bg-cyan-400 text-black', grad:'from-cyan-700 to-zinc-900'},
+  SURF: {icon:'🏄‍♂️', name:'서핑', cls:'bg-emerald-400 text-black', grad:'from-emerald-700 to-zinc-900'}
+};
+
+let lives = [
+  {id:'l1', cat:'MOTO', title:'[LIVE] 유명산 와인딩 코스 실시간 힐클라임 라이딩 생중계', spot:'유명산 와인딩', author:'ApexHunter', viewers:142, url:B+'ForBiggerBlazes.mp4'}
+];
+let shorts = [
+  {id:'s1', cat:'MOTO', title:'드랙스터 800 RR 2단 파워윌리 리어 브레이크 밸런스 컷 🔥', gear:'Dragster 800 RR', spot:'라이딩 연습장', author:'Watson_Rider', views:'4.2천회', url:B+'ForBiggerBlazes.mp4'},
+  {id:'s2', cat:'SNOW', title:'휘닉스파크 빅에어 킥커 백사이드 콕 720 랜딩 슬로우 🏂', gear:'Custom X 156', spot:'휘닉스파크', author:'Shredder_KR', views:'6.8천회', url:B+'ForBiggerEscapes.mp4'},
+  {id:'s3', cat:'SURF', title:'양양 죽도해변 가을 스웰 레이트 테이크오프 & 컷백 🌊', gear:"CI Fever 5'10", spot:'양양 죽도', author:'WaveHunter_KR', views:'5.9천회', url:B+'ForBiggerFun.mp4'},
+  {id:'s4', cat:'MOTO', title:'유명산 헤어핀 풀뱅킹 니다운 온보드 15초 컷', gear:'Yamaha R1', spot:'유명산 와인딩', author:'ApexHunter', views:'3.1천회', url:B+'ForBiggerJoy.mp4'},
+  {id:'s5', cat:'SNOW', title:'하이원 설질 미친 날 토사이드 풀카빙 설면 터치!', gear:'Jones Flagship', spot:'하이원 빅토리아', author:'CarvingMaster', views:'9.5천회', url:B+'ForBiggerMeltdowns.mp4'},
+  {id:'s6', cat:'SURF', title:'발리 울루와뚜 배럴 인앤아웃 1인칭 POV 🏄‍♂️', gear:"Pyzel Ghost 6'0", spot:'발리 울루와뚜', author:'BaliSurfer', views:'8.3천회', url:B+'WeAreGoingOnBullrun.mp4'}
+];
+let videos = [
+  {id:'v1', cat:'MOTO', title:'드랙스터 800 RR 밤바리 와인딩 & 윌리 프론트업 밸런스 연습', gear:'MV Agusta Dragster 800 RR', spot:'북악 & 유명산 와인딩', cam:'Insta360 X4', author:'Watson_Rider', views:'1.8천회', date:'2시간 전', res:'4K 60fps', url:B+'ForBiggerBlazes.mp4', comments:[{user:'CornerKing', t:4, text:'프론트 올라올 때 밸런스 지리네요!'}]},
+  {id:'v2', cat:'SNOW', title:'휘닉스파크 익스트림 파크 킥커 백사이드 360 랜딩 자세 슬로우 교정', gear:'Burton Custom X 156', spot:'휘닉스파크 파크 슬로프', cam:'GoPro Hero 12', author:'Shredder_KR', views:'3.4천회', date:'5시간 전', res:'1080P 120fps', url:B+'ForBiggerEscapes.mp4', comments:[{user:'SnowPark_Pro', t:5, text:'어깨 회전 먼저 들어가는 것 참고하겠습니다.'}]},
+  {id:'v3', cat:'SURF', title:'양양 죽도해변 가을 빅스웰 세션 - 테이크오프 시선 처리 & 바텀턴 분석', gear:"Channel Islands 5'10", spot:'양양 죽도해변 B구간', cam:'Sony 4K 솔로샷', author:'WaveHunter_KR', views:'4.1천회', date:'6시간 전', res:'4K 60fps', url:B+'ForBiggerFun.mp4', comments:[{user:'YangYang_Local', t:6, text:'바텀턴 각도 교과서네요!'}]},
+  {id:'v4', cat:'MOTO', title:'유명산 투어 아침 안개 와인딩 풀런 - 시선 처리 및 브레이킹 포인트 공유', gear:'Yamaha YZF-R1', spot:'유명산 로얄박스가든 코스', cam:'GoPro Hero 11', author:'ApexHunter', views:'940회', date:'1일 전', res:'4K 60fps', url:B+'WeAreGoingOnBullrun.mp4', comments:[]},
+  {id:'v5', cat:'SNOW', title:'하이원 빅토리아 상급 슬로프 아침 땡보딩 풀카빙 롱턴 팔로우캠', gear:'Jones Flagship 158', spot:'하이원리조트 빅토리아1', cam:'Insta360 X4', author:'CarvingMaster', views:'5.1천회', date:'2일 전', res:'1080P 60fps', url:B+'ForBiggerJoy.mp4', comments:[]},
+  {id:'v6', cat:'SURF', title:"제주 중문 색달해변 롱보드 노즈라이딩 & 행파이브 밸런스 교정", gear:"Takayama In The Pink 9'2", spot:'제주 중문 색달해변', cam:'DJI Mavic 3 드론', author:'JejuLongboarder', views:'2.9천회', date:'2일 전', res:'4K 30fps', url:B+'ForBiggerMeltdowns.mp4', comments:[]}
+];
+let garage = {'바이크':'Dragster 800 RR', '스노우보드':'Custom X 156', '서프보드':"Channel Islands 5'10"};
+let cur = 'ALL', activeId = null, activeLive = null, camStream = null, chatTimer = null;
+const chats = {};
+const mainPlayer = $('mainPlayer'), shortsVideo = $('shortsVideo'), liveVideo = $('liveVideo');
+const SPEEDS = [0.25, 0.5, 1, 1.5, 2];
+
+/* ---------- 공통 ---------- */
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.remove('hidden'); clearTimeout(t._t); t._t = setTimeout(() => t.classList.add('hidden'), 2500); }
+function show(name) { ['home', 'watch', 'live', 'photo', 'profile'].forEach(n => $(n + 'View').classList.toggle('hidden', n !== name)); }
+function fmt(s) { s = isFinite(s) ? s : 0; return Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0'); }
+function query() { return ($('searchInput').value || $('searchInputM').value).trim().toLowerCase(); }
+function thumb(url, cat) { return `<div class="absolute inset-0 bg-gradient-to-br ${CATS[cat].grad} flex items-center justify-center text-5xl opacity-90">${CATS[cat].icon}</div><video src="${url}#t=1" preload="metadata" muted playsinline class="absolute inset-0 w-full h-full object-cover pointer-events-none group-hover:scale-105 transition duration-500"></video>`; }
+
+function goHome(cat = 'ALL') {
+  mainPlayer.pause(); shortsVideo.pause(); stopLive();
+  $('shortsModal').classList.add('hidden'); $('shortsModal').classList.remove('flex');
+  cur = cat; activeId = null; show('home');
+  $('searchInput').value = ''; $('searchInputM').value = '';
+  $('scrollArea').scrollTo({top: 0});
+  renderHome();
+}
+function clearSearch() { goHome('ALL'); }
+function tagSearch(k) { if ($('homeView').classList.contains('hidden')) goHome('ALL'); $('searchInput').value = k; renderHome(); }
+function scrollTo2(id) { goHome('ALL'); setTimeout(() => $(id).scrollIntoView({behavior: 'smooth'}), 80); }
+
+/* ---------- 홈 렌더 ---------- */
+function renderHome() {
+  const q = query();
+  const ok = x => (cur === 'ALL' || x.cat === cur) && (!q || [x.title, x.gear, x.spot, x.author, descOf(x)].filter(Boolean).join(' ').toLowerCase().includes(q));
+  const L = lives.filter(ok), S = shorts.filter(ok), V = videos.filter(ok);
+
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('nav-active', b.id === 'nav-' + cur));
+  document.querySelectorAll('.cat-chip').forEach(c => c.classList.toggle('chip-active', c.id === 'chip-' + cur));
+  $('totalBadge').textContent = lives.length + shorts.length + videos.length + photos.length;
+  renderPhotoRow(ok);
+  if (!$('photoView').classList.contains('hidden')) { renderPhotos(); document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('nav-active', b.id === 'nav-PHOTO')); }
+  $('liveBadge').textContent = L.length;
+  $('countInfo').innerHTML = `라이브 <b class="text-red-500">${L.length}</b>개 · 쇼츠 <b class="text-red-400">${S.length}</b>개 · 영상 <b class="text-orange-400">${V.length}</b>개`;
+  $('garageBox').innerHTML = Object.entries(garage).map(([k, v]) => `<div class="bg-zinc-950/80 px-2.5 py-1.5 rounded-lg border border-zinc-800 flex justify-between gap-2"><span class="text-zinc-500">${esc(k)}</span><span class="font-semibold text-zinc-200 truncate">${esc(v)}</span></div>`).join('');
+
+  const empty = t => `<div class="col-span-full py-6 text-center text-zinc-500 text-xs">${t}</div>`;
+  $('liveGrid').innerHTML = L.length ? L.map(l => `
+    <div onclick="openLive('${l.id}')" class="group relative aspect-video rounded-2xl overflow-hidden bg-zinc-900 border border-red-500/50 hover:border-red-500 cursor-pointer shadow-xl">
+      ${l.stream ? `<video data-live="${l.id}" muted autoplay playsinline class="absolute inset-0 w-full h-full object-cover"></video>` : thumb(l.url, l.cat)}
+      <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent"></div>
+      <div class="absolute top-3 left-3 flex gap-2"><span class="bg-red-600 text-white text-[10px] font-black px-2 py-0.5 rounded live-pulse">🔴 LIVE</span><span class="bg-black/70 text-orange-300 text-[10px] font-bold px-2 py-0.5 rounded">시청자 ${l.viewers}명</span></div>
+      <div class="absolute bottom-0 inset-x-0 p-3.5"><h3 class="text-xs font-extrabold line-clamp-1 group-hover:text-red-400">${esc(l.title)}</h3><p class="text-[10px] text-zinc-400">📍 ${esc(l.spot)} · ${esc(l.author)}</p></div>
+    </div>`).join('') : empty('현재 진행 중인 라이브 방송이 없습니다.');
+  L.filter(l => l.stream).forEach(l => { const el = document.querySelector(`[data-live="${l.id}"]`); if (el) { el.srcObject = l.stream; el.play().catch(() => {}); } });
+
+  $('shortsGrid').innerHTML = S.length ? S.map(s => `
+    <div onclick="openShorts('${s.id}')" class="group relative aspect-[9/16] rounded-2xl overflow-hidden bg-zinc-900 border border-zinc-800 hover:border-orange-500 cursor-pointer shadow-lg">
+      ${thumb(s.url, s.cat)}
+      <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent"></div>
+      <span class="absolute top-2.5 left-2.5 bg-red-600 text-white text-[10px] font-black px-1.5 py-0.5 rounded">SHORTS</span>
+      <div class="absolute bottom-0 inset-x-0 p-3"><h3 class="text-xs font-bold line-clamp-2">${esc(s.title)}</h3><p class="text-[10px] text-zinc-400 mt-1">${esc(s.views)}</p></div>
+    </div>`).join('') : empty('조건에 맞는 쇼츠가 없습니다.');
+
+  $('videoGrid').innerHTML = V.length ? V.map(v => `
+    <article onclick="openWatch('${v.id}')" class="group bg-zinc-900/40 hover:bg-zinc-900 border border-zinc-800 rounded-2xl overflow-hidden cursor-pointer shadow-lg flex flex-col">
+      <div class="relative aspect-video bg-black overflow-hidden">
+        ${thumb(v.url, v.cat)}
+        <span class="absolute top-2.5 left-2.5 text-[10px] font-bold px-2 py-0.5 rounded ${CATS[v.cat].cls}">${CATS[v.cat].icon} ${CATS[v.cat].name}</span>
+        <span class="absolute bottom-2 left-2 bg-black/85 text-orange-400 text-[11px] font-bold px-2 py-0.5 rounded">${esc(v.res)}</span>
+      </div>
+      <div class="p-4 flex gap-3 flex-1">
+        <div class="w-8 h-8 shrink-0 rounded-full bg-zinc-800 flex items-center justify-center font-bold text-xs text-orange-400">${esc(v.author.charAt(0))}</div>
+        <div class="min-w-0 flex-1"><h3 class="text-sm font-bold group-hover:text-orange-400 line-clamp-2">${esc(v.title)}</h3><p class="text-[11px] text-zinc-400 pt-1">📍 ${esc(v.spot)} · ${esc(v.author)}</p><p class="text-[11px] text-zinc-500">조회수 ${esc(v.views)} · ${esc(v.date)}</p></div>
+      </div>
+    </article>`).join('') : empty('조건에 맞는 영상이 없습니다.');
+}
+
+/* ---------- 영상 상세 ---------- */
+$('speedBtns').innerHTML = SPEEDS.map(r => `<button data-r="${r}" onclick="setSpeed(${r})" class="spd px-2 py-1 rounded text-[11px] font-semibold bg-zinc-800 text-zinc-300 hover:bg-zinc-700">${r}x</button>`).join('');
+
+function openWatch(id) {
+  const v = videos.find(x => x.id === id); if (!v) return;
+  activeId = id; show('watch'); $('scrollArea').scrollTo({top: 0});
+  mainPlayer.src = v.url; mainPlayer.playbackRate = 1; mainPlayer.play().catch(() => {});
+  $('resBadge').textContent = v.res;
+  $('catBadge').textContent = CATS[v.cat].icon + ' ' + CATS[v.cat].name;
+  $('wTitle').textContent = v.title;
+  $('wMeta').innerHTML = `<button onclick="openUser(this.dataset.u)" data-u="${esc(v.author)}" class="font-bold text-orange-400 hover:underline">@${esc(v.author)}</button> · 조회수 ${esc(v.views)} · ${esc(v.date)}`;
+  $('tags').innerHTML = [[CATS[v.cat].cls, CATS[v.cat].icon + ' ' + CATS[v.cat].name], ['bg-zinc-800 text-zinc-200', '📍 ' + v.spot], ['bg-zinc-800 text-zinc-200', '🛠️ ' + v.gear], ['bg-zinc-800 text-zinc-200', '🎥 ' + v.cam]]
+    .map(([c, t]) => `<span class="text-[11px] font-semibold px-2.5 py-1 rounded-lg ${c}">${esc(t)}</span>`).join('');
+  renderComments(); renderRecs(v); renderDesc(v); syncUI();
+}
+function recsOf(v) { return videos.filter(x => x.id !== v.id).sort((a, b) => (b.cat === v.cat) - (a.cat === v.cat)).slice(0, 6); }
+function renderRecs(v) {
+  $('recList').innerHTML = recsOf(v).map(r => `
+    <div onclick="openWatch('${r.id}')" class="group flex gap-3 cursor-pointer bg-zinc-900/40 hover:bg-zinc-900 border border-zinc-800 rounded-xl p-2">
+      <div class="relative w-40 shrink-0 aspect-video rounded-lg overflow-hidden bg-black">${thumb(r.url, r.cat)}</div>
+      <div class="min-w-0"><h4 class="text-xs font-bold line-clamp-2 group-hover:text-orange-400">${esc(r.title)}</h4><p class="text-[10px] text-zinc-400 mt-1">${esc(r.author)}</p><p class="text-[10px] text-zinc-500">${esc(r.views)} · ${esc(r.res)}</p></div>
+    </div>`).join('');
+}
+function renderComments() {
+  const v = videos.find(x => x.id === activeId); if (!v) return;
+  $('cmtCount').textContent = v.comments.length;
+  $('cmtList').innerHTML = v.comments.length ? v.comments.map(c => `
+    <div class="bg-zinc-950 p-2.5 rounded-lg text-xs flex gap-2"><button onclick="seekTo(${c.t})" class="text-orange-400 font-mono font-bold hover:underline">${fmt(c.t)}</button><span><button onclick="openUser(this.dataset.u)" data-u="${esc(c.user)}" class="font-bold text-zinc-300 hover:text-orange-400 hover:underline">${esc(c.user)}</button> ${esc(c.text)}</span></div>`).join('')
+    : '<p class="text-xs text-zinc-500">첫 댓글을 남겨보세요.</p>';
+}
+function addComment() { if (needLogin()) return;
+  const v = videos.find(x => x.id === activeId), i = $('cmtInput'); if (!v || !i.value.trim()) return;
+  v.comments.push({user: user.name, t: Math.floor(mainPlayer.currentTime || 0), text: i.value.trim()});
+  v.comments.sort((a, b) => a.t - b.t); i.value = ''; renderComments();
+}
+function seekTo(t) { mainPlayer.currentTime = t; mainPlayer.play().catch(() => {}); }
+
+function togglePlay() { mainPlayer.paused ? mainPlayer.play().catch(() => {}) : mainPlayer.pause(); }
+function skip(s) { mainPlayer.currentTime = Math.max(0, Math.min(mainPlayer.duration || 0, mainPlayer.currentTime + s)); }
+function setSpeed(r) { mainPlayer.playbackRate = r; }
+function onSeek(val) { if (mainPlayer.duration) mainPlayer.currentTime = val / 100 * mainPlayer.duration; }
+function toggleFullscreen() { const c = $('playerBox'); document.fullscreenElement ? document.exitFullscreen() : c.requestFullscreen().catch(() => {}); }
+function syncUI() {
+  const p = mainPlayer.paused;
+  $('btnPlay').textContent = p ? '▶' : '⏸';
+  $('centerIcon').classList.toggle('hidden', !p);
+  const r = mainPlayer.playbackRate;
+  $('speedBadge').textContent = r + 'x';
+  document.querySelectorAll('.spd').forEach(b => b.classList.toggle('spd-active', +b.dataset.r === r));
+}
+let idleTimer;
+function wake() {
+  const c = $('playerBox'); c.classList.remove('player-inactive'); clearTimeout(idleTimer);
+  if (!mainPlayer.paused) idleTimer = setTimeout(() => c.classList.add('player-inactive'), 2500);
+}
+['play', 'pause', 'ratechange'].forEach(e => mainPlayer.addEventListener(e, () => { syncUI(); wake(); }));
+mainPlayer.addEventListener('timeupdate', () => {
+  if (!mainPlayer.duration) return;
+  $('timeline').value = mainPlayer.currentTime / mainPlayer.duration * 100;
+  $('timeText').textContent = fmt(mainPlayer.currentTime) + ' / ' + fmt(mainPlayer.duration);
+});
+mainPlayer.addEventListener('ended', () => {
+  const v = videos.find(x => x.id === activeId); if (!v) return;
+  const next = recsOf(v)[0]; if (next) { toast('다음 클립으로 자동 재생'); openWatch(next.id); }
+});
+document.addEventListener('keydown', e => {
+  if ($('watchView').classList.contains('hidden') || /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
+  if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+  if (e.code === 'ArrowLeft') skip(-5);
+  if (e.code === 'ArrowRight') skip(5);
+  if (e.key === 'f') toggleFullscreen();
+});
+$('playerBox').insertAdjacentHTML('beforeend', '');
+$('speedBtns').insertAdjacentHTML('beforeend', '<button onclick="toggleFullscreen()" class="ml-1 bg-zinc-800 hover:bg-orange-500 px-2.5 py-1 rounded text-xs font-bold">⛶</button>');
+
+/* ---------- 라이브 ---------- */
+function openLive(id) {
+  const l = lives.find(x => x.id === id); if (!l) return;
+  activeLive = id; show('live'); $('scrollArea').scrollTo({top: 0});
+  $('lTitle').textContent = l.title;
+  $('lMeta').textContent = `@${l.author} · 📍 ${l.spot} · 시청자 ${l.viewers}명`;
+  if (l.stream) { liveVideo.removeAttribute('src'); liveVideo.srcObject = l.stream; liveVideo.muted = true; }
+  else { liveVideo.srcObject = null; liveVideo.muted = false; liveVideo.src = l.url; }
+  liveVideo.play().catch(() => {});
+  chats[id] = chats[id] || [{u: 'Moto_Man', t: '오늘 컨디션 대박이네요!'}];
+  renderChat();
+  const bots = [['SnowPark_Pro', '화질 미쳤다 👍'], ['CornerKing', '지금 코너 진입 각도 좋아요'], ['WaveHunter', '응원합니다 🔥'], ['Rider_01', '어디 스팟인가요?']];
+  clearInterval(chatTimer);
+  chatTimer = setInterval(() => { const b = bots[Math.floor(Math.random() * bots.length)]; chats[id].push({u: b[0], t: b[1]}); renderChat(); }, 4500);
+}
+function stopLive() { liveVideo.pause(); clearInterval(chatTimer); activeLive = null; }
+function renderChat() {
+  const box = $('chatBox');
+  box.innerHTML = '';
+  (chats[activeLive] || []).forEach(m => {
+    const d = document.createElement('div'); d.className = 'bg-zinc-950 p-2 rounded-lg';
+    const n = document.createElement('span'); n.className = 'font-bold text-orange-400'; n.textContent = m.u + ': ';
+    d.append(n, document.createTextNode(m.t)); box.appendChild(d);
+  });
+  box.scrollTop = box.scrollHeight;
+}
+function sendChat() { if (needLogin()) return;
+  const i = $('chatInput'); if (!i.value.trim() || !activeLive) return;
+  chats[activeLive].push({u: user.name, t: i.value.trim()}); i.value = ''; renderChat();
+}
+
+async function openBroadcast() { if (needLogin()) return;
+  $('broadcastModal').classList.remove('hidden'); $('broadcastModal').classList.add('flex');
+  try { camStream = await navigator.mediaDevices.getUserMedia({video: true, audio: true}); $('previewEl').srcObject = camStream; }
+  catch (e) { camStream = null; toast('카메라 권한 없음 → 샘플 영상으로 송출됩니다'); }
+}
+function closeBroadcast(stop) {
+  if (stop && camStream) { camStream.getTracks().forEach(t => t.stop()); }
+  camStream = null; $('previewEl').srcObject = null;
+  $('broadcastModal').classList.add('hidden'); $('broadcastModal').classList.remove('flex');
+}
+function startBroadcast() {
+  const l = {id: 'l_' + Date.now(), cat: $('bCat').value, title: '[LIVE] ' + ($('bTitle').value.trim() || '실시간 라이브 방송'),
+    spot: $('bSpot').value.trim() || '현장 스팟', author: user.name, viewers: 1, url: B + 'ForBiggerBlazes.mp4', stream: camStream};
+  lives.unshift(l); closeBroadcast(false);
+  $('bTitle').value = ''; $('bSpot').value = '';
+  toast('🔴 라이브 방송이 시작되었습니다!'); cur = 'ALL'; scrollTo2('liveSection');
+}
+
+/* ---------- 쇼츠 / 업로드 / 차고 ---------- */
+function openShorts(id) {
+  const s = shorts.find(x => x.id === id); if (!s) return;
+  $('shortsTitle').textContent = s.title; shortsVideo.src = s.url;
+  $('shortsModal').classList.remove('hidden'); $('shortsModal').classList.add('flex');
+  shortsVideo.play().catch(() => {});
+}
+function closeShorts() { shortsVideo.pause(); $('shortsModal').classList.add('hidden'); $('shortsModal').classList.remove('flex'); }
+function openUpload() { if (needLogin()) return; $('uploadModal').classList.remove('hidden'); $('uploadModal').classList.add('flex'); }
+function closeUpload() { $('uploadModal').classList.add('hidden'); $('uploadModal').classList.remove('flex'); }
+function submitUpload() {
+  const f = $('upFile').files[0]; if (!f) return alert('영상을 선택해주세요!');
+  const cat = $('upCat').value;
+  videos.unshift({id: 'v_' + Date.now(), cat, title: $('upTitle').value.trim() || f.name.replace(/\.[^.]+$/, ''), gear: garage[cat === 'MOTO' ? '바이크' : cat === 'SNOW' ? '스노우보드' : '서프보드'],
+    spot: $('upSpot').value.trim() || '미지정', cam: '미지정', author: user.name, views: '0회', date: '방금 전', res: '1080P', url: URL.createObjectURL(f), comments: [], desc: $('upDesc').value.trim()});
+  $('upFile').value = ''; $('upTitle').value = ''; $('upSpot').value = ''; $('upDesc').value = '';
+  closeUpload(); toast('업로드 완료 (새로고침하면 사라집니다)'); goHome(cat);
+}
+function editGarage() { goProfile(); return;
+  Object.keys(garage).forEach(k => { const v = prompt(k + ':', garage[k]); if (v !== null && v.trim()) garage[k] = v.trim(); });
+  renderHome();
+}
+
+/* ---------- 포토 ---------- */
+const COMMON = ['대파 모음', '크루샷', '베스트샷'];
+const PTYPES = {MOTO: ['패닝샷', '롤링샷', '코너링', '정차 감성샷', '장비'], SNOW: ['슬로프 인생샷', '파크 공중샷', '카빙', '설경'], SURF: ['테이크오프', '배럴', '라인업 풍경', '일출·일몰']};
+const typesOf = c => c === 'ALL' ? [...Object.values(PTYPES).flat(), ...COMMON] : [...PTYPES[c], ...COMMON];
+const P = (id, cat, type, title, spot, author, settings, likes, n, r, x = {}) => ({id, cat, type, title, spot, author, settings, likes, liked: false, imgs: Array(n).fill(null), r, time: '', model: '', ...x});
+let photos = [
+  P('p1', 'SNOW', '슬로프 인생샷', '휘닉스파크 아침 설질 인생샷 세트', '휘닉스파크', 'Shredder_KR', '1/1000s · f/2.8 · ISO 100', 128, 3, 'aspect-[3/4]', {model: 'Snow_Girl', time: '골든아워', vid: 'v2'}),
+  P('p2', 'MOTO', '패닝샷', '유명산 코너 패닝샷 1/60', '유명산 와인딩', 'ApexHunter', '1/60s · f/8 · ISO 100', 214, 1, 'aspect-[16/10]', {vid: 'v4'}),
+  P('p3', 'SNOW', '대파 모음', '킥커 랜딩 대파 😂 (멀쩡합니다)', '휘닉스파크', 'CarvingMaster', '1/2000s · f/4 · ISO 200', 301, 4, 'aspect-square'),
+  P('p4', 'SURF', '테이크오프', '죽도 가을 스웰 테이크오프', '양양 죽도', 'WaveHunter_KR', '1/1600s · f/5.6 · ISO 200', 97, 2, 'aspect-[4/5]', {vid: 'v3'}),
+  P('p5', 'MOTO', '롤링샷', '북악 야간 롤링샷', '북악 스카이웨이', 'Watson_Rider', '1/40s · f/2.8 · ISO 800', 76, 1, 'aspect-[4/5]', {time: '야간', vid: 'v1'}),
+  P('p6', 'SURF', '일출·일몰', '제주 색달 일몰 라인업', '제주 중문 색달해변', 'JejuLongboarder', '1/500s · f/8 · ISO 100', 152, 2, 'aspect-[16/9]', {time: '골든아워'}),
+  P('p7', 'SNOW', '카빙', '하이원 풀카빙 설면 터치 컷', '하이원 빅토리아', 'CarvingMaster', '1/1000s · f/5.6 · ISO 100', 88, 1, 'aspect-[3/4]'),
+  P('p8', 'MOTO', '대파 모음', '헤어핀 미끄러짐 직전 컷 😱', '유명산 와인딩', 'ApexHunter', '1/500s · f/4 · ISO 400', 187, 1, 'aspect-[4/3]')
+];
+let pCat = 'ALL', pType = 'ALL', lbList = [], lbPos = 0;
+
+function pic(p, i, fill) {
+  const s = p.imgs[i];
+  if (s) return `<img src="${s}" class="w-full block ${fill ? 'h-full object-cover' : ''}">`;
+  return `<div class="w-full ${fill ? 'h-full' : p.r} bg-gradient-to-br ${CATS[p.cat].grad} flex flex-col items-center justify-center gap-1"><span class="text-5xl">${CATS[p.cat].icon}</span><span class="text-[10px] text-zinc-400">SAMPLE</span></div>`;
+}
+function photoFilter() {
+  const q = query();
+  return photos.filter(p => (pCat === 'ALL' || p.cat === pCat) && (pType === 'ALL' || p.type === pType) && (!q || [p.title, p.spot, p.author, p.type].join(' ').toLowerCase().includes(q)));
+}
+function goPhotos(reset) {
+  mainPlayer.pause(); stopLive();
+  if (reset) { pCat = 'ALL'; pType = 'ALL'; $('searchInput').value = ''; $('searchInputM').value = ''; }
+  show('photo'); $('scrollArea').scrollTo({top: 0});
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('nav-active', b.id === 'nav-PHOTO'));
+  renderPhotos();
+}
+function setPCat(c) { pCat = c; pType = 'ALL'; renderPhotos(); }
+function setPType(t) { pType = t; renderPhotos(); }
+function renderPhotos() {
+  const L = photoFilter();
+  document.querySelectorAll('.pcat').forEach(b => b.classList.toggle('chip-active', b.dataset.c === pCat));
+  $('ptypeChips').innerHTML = ['ALL', ...typesOf(pCat)].map(t => `<button onclick="setPType('${t}')" class="px-3 py-1 rounded-lg text-[11px] font-semibold border ${t === pType ? 'chip-active' : 'bg-zinc-900 text-zinc-300 border-zinc-800'}">${t === 'ALL' ? '모든 유형' : esc(t)}</button>`).join('');
+  $('photoCount').textContent = L.length + '장';
+  $('photoGrid').innerHTML = L.length ? L.map(p => `
+    <div onclick="openPhoto('${p.id}',0)" class="group break-inside-avoid mb-4 relative cursor-pointer rounded-2xl overflow-hidden border border-zinc-800 hover:border-orange-500 bg-zinc-900">
+      ${pic(p, 0)}
+      <span class="absolute top-2.5 left-2.5 text-[10px] font-bold px-2 py-0.5 rounded ${CATS[p.cat].cls}">${esc(p.type)}</span>
+      ${p.imgs.length > 1 ? `<span class="absolute top-2.5 right-2.5 bg-black/70 text-[10px] font-bold px-2 py-0.5 rounded">📷 ${p.imgs.length}장</span>` : ''}
+      <div class="absolute bottom-0 inset-x-0 p-3 bg-gradient-to-t from-black/90 to-transparent md:opacity-0 md:group-hover:opacity-100 transition"><h3 class="text-xs font-bold line-clamp-2">${esc(p.title)}</h3><p class="text-[10px] text-zinc-400">@${esc(p.author)} · ❤ ${p.likes}</p></div>
+    </div>`).join('') : '<p class="text-xs text-zinc-500 py-10 text-center">조건에 맞는 사진이 없습니다.</p>';
+}
+function renderPhotoRow(ok) {
+  const L = photos.filter(ok).slice(0, 10);
+  $('photoRow').innerHTML = L.length ? L.map(p => `
+    <div onclick="goPhotos(true);openPhoto('${p.id}',0)" class="relative shrink-0 w-40 h-52 rounded-2xl overflow-hidden border border-zinc-800 hover:border-orange-500 cursor-pointer">
+      ${pic(p, 0, true)}
+      <span class="absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded ${CATS[p.cat].cls}">${esc(p.type)}</span>
+      ${p.imgs.length > 1 ? `<span class="absolute top-2 right-2 bg-black/70 text-[10px] font-bold px-1.5 py-0.5 rounded">📷 ${p.imgs.length}</span>` : ''}
+      <div class="absolute bottom-0 inset-x-0 p-2.5 bg-gradient-to-t from-black/90 to-transparent"><h3 class="text-[11px] font-bold line-clamp-2">${esc(p.title)}</h3></div>
+    </div>`).join('') : '<p class="text-xs text-zinc-500 py-4">조건에 맞는 사진이 없습니다.</p>';
+}
+
+/* 라이트박스 */
+function openPhoto(id, i) {
+  lbList = [];
+  photoFilter().forEach(p => p.imgs.forEach((_, k) => lbList.push([p.id, k])));
+  lbPos = Math.max(0, lbList.findIndex(x => x[0] === id && x[1] === i));
+  $('lightbox').classList.remove('hidden'); $('lightbox').classList.add('flex'); renderLB();
+}
+function closeLB() { $('lightbox').classList.add('hidden'); $('lightbox').classList.remove('flex'); }
+function lbMove(d) { if (!lbList.length) return; lbPos = (lbPos + d + lbList.length) % lbList.length; renderLB(); }
+function lbGo(id, k) { lbPos = lbList.findIndex(x => x[0] === id && x[1] === k); renderLB(); }
+function likePhoto(id) { if (needLogin()) return; const p = photos.find(x => x.id === id); p.liked = !p.liked; p.likes += p.liked ? 1 : -1; renderLB(); renderPhotos(); }
+function renderLB() {
+  const [id, i] = lbList[lbPos], p = photos.find(x => x.id === id), src = p.imgs[i], g = CATS[p.cat];
+  $('lbStage').innerHTML = src ? `<img src="${src}" class="max-h-[75vh] max-w-full object-contain rounded-xl">`
+    : `<div class="${p.r} h-[55vh] max-w-full bg-gradient-to-br ${g.grad} rounded-xl flex flex-col items-center justify-center gap-2"><span class="text-7xl">${g.icon}</span><span class="text-xs text-zinc-400">샘플 이미지 ${i + 1}/${p.imgs.length}</span></div>`;
+  $('lbThumbs').innerHTML = p.imgs.length > 1 ? p.imgs.map((s, k) => `<button onclick="lbGo('${id}',${k})" class="w-14 h-14 rounded-lg overflow-hidden border-2 ${k === i ? 'border-orange-500' : 'border-zinc-700'}">${s ? `<img src="${s}" class="w-full h-full object-cover">` : `<div class="w-full h-full bg-gradient-to-br ${g.grad} flex items-center justify-center text-xs">${k + 1}</div>`}</button>`).join('') : '';
+  $('lbInfo').innerHTML = `<span class="text-[11px] font-semibold px-2.5 py-1 rounded-lg ${g.cls}">${esc(p.type)}</span>
+    <h3 class="text-base font-bold mt-3">${esc(p.title)}</h3>
+    <p class="text-xs text-zinc-400 mt-1">📷 <button onclick="openUser(this.dataset.u)" data-u="${esc(p.author)}" class="font-bold hover:text-orange-400 hover:underline">@${esc(p.author)}</button>${p.model ? ` · 🙋 ${esc(p.model)}` : ''}</p>
+    <div class="mt-4 space-y-1.5 text-xs text-zinc-300"><p>📍 ${esc(p.spot)}</p>${p.settings ? `<p>⚙️ ${esc(p.settings)}</p>` : ''}${p.time ? `<p>🕒 ${esc(p.time)}</p>` : ''}${p.imgs.length > 1 ? `<p>🖼️ 세트 ${i + 1} / ${p.imgs.length}</p>` : ''}</div>
+    <div class="mt-5 flex gap-2"><button onclick="likePhoto('${id}')" class="px-4 py-2 rounded-xl text-xs font-bold ${p.liked ? 'bg-orange-500 text-white' : 'bg-zinc-800'}">❤ ${p.likes}</button>${p.vid ? `<button onclick="closeLB();openWatch('${p.vid}')" class="px-4 py-2 rounded-xl text-xs font-bold bg-zinc-800 hover:bg-zinc-700">🎬 관련 영상</button>` : ''}</div>`;
+}
+document.addEventListener('keydown', e => {
+  if ($('lightbox').classList.contains('hidden')) return;
+  if (e.key === 'Escape') closeLB();
+  if (e.key === 'ArrowLeft') lbMove(-1);
+  if (e.key === 'ArrowRight') lbMove(1);
+});
+
+/* 사진 업로드 (한 장 / 세트) */
+function fillPhTypes() { $('phType').innerHTML = typesOf($('phCat').value).map(t => `<option>${esc(t)}</option>`).join(''); }
+function openPhUpload() { if (needLogin()) return; fillPhTypes(); $('phUpModal').classList.remove('hidden'); $('phUpModal').classList.add('flex'); }
+function closePhUpload() { $('phUpModal').classList.add('hidden'); $('phUpModal').classList.remove('flex'); }
+function phChanged() {
+  const n = $('phFile').files.length, r = $('phSetRow');
+  r.classList.toggle('hidden', n < 2); r.classList.toggle('flex', n >= 2);
+  $('phSetTxt').textContent = `${n}장 선택됨 — 하나의 세트로 묶기 (해제하면 각각 올라갑니다)`;
+}
+function submitPhoto() {
+  const fs = [...$('phFile').files]; if (!fs.length) return alert('사진을 선택해주세요!');
+  const base = {cat: $('phCat').value, type: $('phType').value, spot: $('phSpot').value.trim() || '미지정', author: user.name, settings: $('phSet').value.trim(), model: $('phModel').value.trim(), likes: 0, liked: false, time: '', r: 'aspect-[4/3]'};
+  const title = $('phTitle').value.trim(), urls = fs.map(f => URL.createObjectURL(f)), t = Date.now();
+  if (fs.length > 1 && $('phSetChk').checked) {
+    photos.unshift({...base, id: 'p_' + t, title: title || base.type + ' 세트', imgs: urls});
+    toast(`📷 ${fs.length}장 세트로 업로드되었습니다`);
+  } else {
+    urls.forEach((u, k) => photos.unshift({...base, id: 'p_' + t + '_' + k, title: title ? (urls.length > 1 ? `${title} ${k + 1}` : title) : fs[k].name.replace(/\.[^.]+$/, ''), imgs: [u]}));
+    toast(`📷 ${fs.length}장 업로드 완료 (새로고침하면 사라집니다)`);
+  }
+  ['phFile', 'phTitle', 'phSpot', 'phSet', 'phModel'].forEach(i => $(i).value = '');
+  phChanged(); closePhUpload(); pCat = 'ALL'; pType = 'ALL'; goPhotos();
+}
+
+/* ---------- 로그인 ---------- */
+const PROV = {google: 'Google', kakao: '카카오', naver: '네이버'};
+let user = null, sb = null;
+try { user = JSON.parse(localStorage.getItem('rs_user') || 'null'); } catch (e) {}
+function setUser(u) {
+  user = u;
+  try { u ? localStorage.setItem('rs_user', JSON.stringify(u)) : localStorage.removeItem('rs_user'); } catch (e) {}
+  renderAuth();
+}
+function renderAuth() {
+  $('authArea').innerHTML = user ? `
+    <div class="relative">
+      <button onclick="$('userMenu').classList.toggle('hidden')" class="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded-xl pl-1.5 pr-3 py-1.5 text-xs">
+        <span class="w-6 h-6 rounded-full bg-orange-500 text-white font-bold flex items-center justify-center">${esc(user.name.charAt(0).toUpperCase())}</span>
+        <span class="hidden sm:block max-w-[90px] truncate font-semibold">${esc(user.name)}</span>
+      </button>
+      <div id="userMenu" class="hidden absolute right-0 mt-2 w-48 bg-zinc-900 border border-zinc-800 rounded-xl p-3 text-xs space-y-2 z-40">
+        <p class="font-bold truncate">${esc(user.name)}</p>
+        <p class="text-zinc-400">${esc(PROV[user.provider] || user.provider)} 계정${user.demo ? ' (데모)' : ''}</p>
+        <button onclick="goProfile()" class="w-full bg-orange-500 hover:bg-orange-600 text-white rounded-lg py-2 font-bold">⚙️ 내 정보 설정</button>
+        <button onclick="logout()" class="w-full bg-zinc-800 hover:bg-red-600 rounded-lg py-2 font-bold">로그아웃</button>
+      </div>
+    </div>` : `<button onclick="openLogin()" class="bg-zinc-100 hover:bg-white text-zinc-900 font-bold px-3.5 py-2 rounded-xl text-xs">로그인</button>`;
+}
+document.addEventListener('click', e => { const m = $('userMenu'); if (m && !e.target.closest('#authArea')) m.classList.add('hidden'); });
+function needLogin() { if (user) return false; openLogin(); toast('로그인이 필요한 기능입니다'); return true; }
+function openLogin() {
+  $('loginNote').textContent = sb ? 'Google·카카오는 실제 계정으로 로그인됩니다. 네이버는 데모 로그인입니다.' : '⚠️ 프로토타입: 서버(Supabase) 연동 전에는 데모 로그인으로 동작합니다. (⚙️ 설정에서 연동)';
+  $('loginModal').classList.remove('hidden'); $('loginModal').classList.add('flex');
+}
+function closeLogin() { $('loginModal').classList.add('hidden'); $('loginModal').classList.remove('flex'); }
+async function loginWith(p) {
+  if (sb && p !== 'naver') {
+    if (location.protocol === 'file:') { toast('file:// 에서는 OAuth가 안 됩니다. 로컬 서버/호스팅 주소로 여세요'); return; }
+    const {error} = await sb.auth.signInWithOAuth({provider: p, options: {redirectTo: location.href.split('#')[0]}});
+    if (error) toast('로그인 오류: ' + error.message);
+    return;
+  }
+  setUser({name: prof.nick || 'Watson_Rider', provider: p, demo: true});
+  closeLogin(); toast(`${PROV[p]} 데모 로그인 완료`);
+}
+function logout() { if (sb) sb.auth.signOut(); setUser(null); toast('로그아웃 되었습니다'); }
+
+function openConfig() {
+  let c = {}; try { c = JSON.parse(localStorage.getItem('rs_sb') || '{}'); } catch (e) {}
+  $('cfgUrl').value = c.url || ''; $('cfgKey').value = c.key || '';
+  $('cfgModal').classList.remove('hidden'); $('cfgModal').classList.add('flex');
+}
+function closeConfig() { $('cfgModal').classList.add('hidden'); $('cfgModal').classList.remove('flex'); }
+function saveConfig() {
+  try { localStorage.setItem('rs_sb', JSON.stringify({url: $('cfgUrl').value.trim(), key: $('cfgKey').value.trim()})); } catch (e) {}
+  location.reload();
+}
+function clearConfig() { try { localStorage.removeItem('rs_sb'); } catch (e) {} location.reload(); }
+function initSb() {
+  let c = {}; try { c = JSON.parse(localStorage.getItem('rs_sb') || '{}'); } catch (e) {}
+  if (!c.url || !c.key || !window.supabase) return;
+  sb = window.supabase.createClient(c.url, c.key);
+  const apply = s => {
+    if (s && s.user) {
+      const m = s.user.user_metadata || {};
+      setUser({name: prof.nick || m.name || m.full_name || m.nickname || (s.user.email || 'user').split('@')[0], provider: (s.user.app_metadata || {}).provider || 'google'});
+    } else if (user && !user.demo) setUser(null);
+  };
+  sb.auth.getSession().then(r => apply(r.data.session));
+  sb.auth.onAuthStateChange((_e, s) => apply(s));
+}
+/* ---------- 내 정보 설정 ---------- */
+let prof = {cats: []}, draft = null;
+try { prof = Object.assign({cats: []}, JSON.parse(localStorage.getItem('rs_profile') || '{}')); } catch (e) {}
+const PF = [
+  ['👤 기본 정보', [['nick', '닉네임', 'text', '예: Watson_Rider'], ['bio', '소개말', 'area', '나를 소개해 보세요 (150자)'], ['region', '활동 지역', 'text', '예: 서울 / 경기 가평']]],
+  ['📍 주 종목 · 주 베이스', [['cats'], ['base', '주 베이스 스팟 (쉼표로 구분, 최대 3곳)', 'text', '예: 유명산 와인딩, 휘닉스파크, 양양 죽도']]],
+  ['🔗 소셜 계정', [['insta', 'Instagram', 'text', '아이디 (@ 제외)'], ['yt', 'YouTube', 'text', '@핸들 또는 채널 주소'], ['tt', 'TikTok', 'text', '아이디 (@ 제외)'], ['kakao', '카카오톡 오픈채팅', 'text', 'https://open.kakao.com/...'], ['naver', '네이버 블로그 · 카페', 'text', 'https://blog.naver.com/...']]],
+  ['🛠️ 장비 세팅', [['bike', '🏍️ 바이크 기종', 'text', '예: MV Agusta Dragster 800 RR'], ['bikeNote', '바이크 세팅 · 튜닝', 'text', '예: 슬립온 머플러, 로우 핸들'], ['board', '🏂 스노우보드', 'text', '예: Burton Custom X 156'], ['boardNote', '바인딩 · 부츠 세팅', 'text', '예: Union Force / 스탠스 +15 -9'], ['surf', '🏄‍♂️ 서프보드', 'text', "예: Channel Islands 5'10"], ['surfNote', '핀 · 리쉬 · 왁스 세팅', 'text', '예: 쿼드 핀 / 6ft 리쉬'], ['cam', '📹 촬영 장비', 'text', '예: Insta360 X4, GoPro 12'], ['protect', '🛡️ 보호 장비', 'text', '예: 풀페이스 헬멧, 등 프로텍터']]]
+];
+const SOC = {
+  insta: ['📷', 'Instagram', v => 'https://instagram.com/' + encodeURIComponent(v.replace(/^@/, ''))],
+  yt: ['▶️', 'YouTube', v => /^https?:\/\//.test(v) ? v : 'https://youtube.com/@' + encodeURIComponent(v.replace(/^@/, ''))],
+  tt: ['🎵', 'TikTok', v => 'https://tiktok.com/@' + encodeURIComponent(v.replace(/^@/, ''))],
+  kakao: ['💬', '카카오톡', v => /^https?:\/\//.test(v) ? v : ''],
+  naver: ['N', '네이버', v => /^https?:\/\//.test(v) ? v : '']
+};
+function syncGarage() {
+  if (prof.bike) garage['바이크'] = prof.bike;
+  if (prof.board) garage['스노우보드'] = prof.board;
+  if (prof.surf) garage['서프보드'] = prof.surf;
+}
+syncGarage();
+function goProfile() {
+  if (needLogin()) return;
+  mainPlayer.pause(); stopLive();
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-active'));
+  show('profile'); $('scrollArea').scrollTo({top: 0});
+  draft = Object.assign({}, prof, {cats: [...(prof.cats || [])]});
+  if (!draft.nick) draft.nick = user.name;
+  renderProfileForm(); renderPreview();
+}
+function renderProfileForm() {
+  $('profForm').innerHTML = PF.map(([title, fs]) => `
+    <div class="bg-zinc-900/50 border border-zinc-800 rounded-2xl p-5 space-y-3"><h3 class="text-sm font-bold">${title}</h3>
+    ${fs.map(([k, label, type, ph]) => k === 'cats'
+      ? `<div><label class="block text-xs font-bold text-zinc-300 mb-1.5">주 종목 (복수 선택)</label><div id="pfCats" class="flex gap-2 flex-wrap"></div></div>`
+      : `<div><label class="block text-xs font-bold text-zinc-300 mb-1">${label}</label>${type === 'area'
+          ? `<textarea id="pf_${k}" maxlength="150" rows="3" placeholder="${ph}" class="fld resize-none">${esc(draft[k] || '')}</textarea>`
+          : `<input id="pf_${k}" value="${esc(draft[k] || '')}" placeholder="${ph}" class="fld">`}</div>`).join('')}
+    </div>`).join('');
+  $('profForm').oninput = () => { readForm(); renderPreview(); };
+  renderCats();
+}
+function renderCats() {
+  $('pfCats').innerHTML = Object.entries(CATS).map(([c, v]) => `<button onclick="togCat('${c}')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold border ${draft.cats.includes(c) ? 'chip-active' : 'bg-zinc-950 text-zinc-300 border-zinc-800'}">${v.icon} ${v.name}</button>`).join('');
+}
+function togCat(c) { const i = draft.cats.indexOf(c); i < 0 ? draft.cats.push(c) : draft.cats.splice(i, 1); renderCats(); renderPreview(); }
+function readForm() { PF.forEach(([, fs]) => fs.forEach(([k]) => { const el = $('pf_' + k); if (el) draft[k] = el.value.trim(); })); }
+function saveProfile() {
+  readForm();
+  if (!draft.nick) return toast('닉네임을 입력해주세요');
+  draft.base = (draft.base || '').split(',').map(x => x.trim()).filter(Boolean).slice(0, 3).join(', ');
+  prof = Object.assign({}, draft, {cats: [...draft.cats]});
+  try { localStorage.setItem('rs_profile', JSON.stringify(prof)); } catch (e) {}
+  syncGarage();
+  if (user) setUser(Object.assign({}, user, {name: prof.nick}));
+  $('pf_base').value = prof.base; renderPreview(); renderHome();
+  toast('✅ 내 정보가 저장되었습니다');
+}
+function renderPreview() {
+  const p = draft || prof, name = p.nick || (user && user.name) || 'Rider';
+  const nv = videos.filter(v => v.author === name).length, np = photos.filter(x => x.author === name).length;
+  const gear = [['🏍️', p.bike, p.bikeNote], ['🏂', p.board, p.boardNote], ['🏄‍♂️', p.surf, p.surfNote], ['📹', p.cam], ['🛡️', p.protect]].filter(g => g[1]);
+  const socials = Object.keys(SOC).filter(k => p[k]).map(k => {
+    const [ic, label, fn] = SOC[k], u = fn(p[k]), cls = 'inline-flex items-center gap-1 text-[11px] font-semibold bg-zinc-800 px-2.5 py-1 rounded-lg';
+    return u ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer" class="${cls} hover:bg-orange-500">${ic} ${label}</a>` : `<span class="${cls}">${ic} ${label}</span>`;
+  });
+  $('profPreview').innerHTML = `
+    <div class="flex items-center gap-3"><div class="w-14 h-14 rounded-full bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center text-2xl font-black">${esc(name.charAt(0).toUpperCase())}</div>
+      <div class="min-w-0"><h3 class="font-extrabold text-base truncate">${esc(name)}</h3><p class="text-[11px] text-zinc-400">${user ? esc(PROV[user.provider] || user.provider) + ' 계정' : ''}${p.region ? ' · ' + esc(p.region) : ''}</p></div></div>
+    <p class="text-xs text-zinc-300 whitespace-pre-line">${p.bio ? esc(p.bio) : '<span class="text-zinc-600">소개말을 입력해 보세요.</span>'}</p>
+    <div class="flex flex-wrap gap-1.5">${(p.cats || []).map(c => `<span class="text-[10px] font-bold px-2 py-0.5 rounded ${CATS[c].cls}">${CATS[c].icon} ${CATS[c].name}</span>`).join('')}</div>
+    ${p.base ? `<div><p class="text-[11px] font-bold text-zinc-500 mb-1.5">📍 주 베이스</p><div class="flex flex-wrap gap-1.5">${p.base.split(',').map(x => x.trim()).filter(Boolean).slice(0, 3).map(x => `<span class="text-[11px] bg-zinc-950 border border-zinc-800 px-2.5 py-1 rounded-lg">${esc(x)}</span>`).join('')}</div></div>` : ''}
+    ${socials.length ? `<div><p class="text-[11px] font-bold text-zinc-500 mb-1.5">🔗 소셜</p><div class="flex flex-wrap gap-1.5">${socials.join('')}</div></div>` : ''}
+    ${gear.length ? `<div><p class="text-[11px] font-bold text-zinc-500 mb-1.5">🛠️ 장비 세팅</p><div class="space-y-1.5 text-xs">${gear.map(g => `<div class="bg-zinc-950/80 border border-zinc-800 rounded-lg px-2.5 py-1.5"><span>${g[0]} ${esc(g[1])}</span>${g[2] ? `<p class="text-[10px] text-zinc-500 mt-0.5">${esc(g[2])}</p>` : ''}</div>`).join('')}</div></div>` : ''}
+    <div class="flex gap-4 pt-3 border-t border-zinc-800 text-xs text-zinc-400"><span>🎬 영상 <b class="text-orange-400">${nv}</b></span><span>📸 사진 <b class="text-orange-400">${np}</b></span></div>`;
+}
+
+/* ---------- 영상 설명 (더보기란) ---------- */
+const DESCS = {
+  v1: '드랙스터 800 RR로 북악 & 유명산 와인딩을 달리며 윌리 프론트업 밸런스를 연습한 영상입니다.\n\n⏱️ 타임라인\n0:00 오프닝\n0:04 프론트업 밸런스 포인트\n0:10 코너 탈출 가속\n\n📷 Insta360 X4로 촬영했어요.\n장비 세팅이 궁금하시면 댓글 남겨주세요!\n\n#드랙스터 #와인딩 #윌리 #북악',
+  v2: '휘닉스파크 파크 슬로프에서 백사이드 360 랜딩 자세를 슬로우로 돌려보며 교정한 영상입니다.\n\n0:00 킥커 진입\n0:05 어깨 회전 시작\n0:10 랜딩\n\n#스노우보드 #휘닉스파크 #백사이드360 #킥커',
+  v3: '양양 죽도해변 가을 스웰 세션입니다. 테이크오프 시선 처리와 바텀턴을 슬로우로 분석했습니다.\n\n0:00 라인업\n0:06 바텀턴\n\n컨디션이 좋은 날이라 파도가 길게 들어왔어요 🌊\n\n#서핑 #양양 #죽도해변 #바텀턴',
+  v4: '유명산 아침 안개 와인딩 풀런입니다. 시선 처리와 브레이킹 포인트를 공유합니다.\n\n#유명산 #와인딩 #풀런 #R1',
+  v5: '하이원 빅토리아 상급 슬로프 아침 땡보딩 풀카빙 롱턴 팔로우캠입니다.\n\n#하이원 #카빙 #땡보딩 #스노우보드',
+  v6: '제주 중문 색달해변 롱보드 노즈라이딩과 행파이브 스텝 밸런스 교정 영상입니다.\n\n#롱보드 #제주 #색달해변 #노즈라이딩'
+};
+const descOf = x => x.desc || DESCS[x.id] || '';
+const tsToSec = t => t.split(':').reduce((a, n) => a * 60 + Number(n), 0);
+function fmtDesc(t) {
+  return esc(t)
+    .replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-sky-400 hover:underline break-all">$1</a>')
+    .replace(/(^|\s)#([\w가-힣]+)/g, '$1<button onclick="descTag(this.dataset.t)" data-t="$2" class="text-sky-400 hover:underline">#$2</button>')
+    .replace(/(^|\s)(\d{1,2}:\d{2}(?::\d{2})?)(?=\s|$)/g, (m, pre, ts) => `${pre}<button onclick="seekTo(${tsToSec(ts)})" class="text-sky-400 hover:underline font-mono">${ts}</button>`);
+}
+let descOpen = false;
+function renderDesc(v) {
+  const t = descOf(v), el = $('descText'), btn = $('descBtn');
+  descOpen = false;
+  el.innerHTML = t ? fmtDesc(t) : '<span class="text-zinc-600">등록된 설명이 없습니다.</span>';
+  el.style.maxHeight = '3.3em'; btn.classList.add('hidden');
+  requestAnimationFrame(() => {
+    if (t && el.scrollHeight > el.clientHeight + 2) { btn.classList.remove('hidden'); btn.textContent = '더보기'; }
+    else el.style.maxHeight = 'none';
+  });
+}
+function toggleDesc() {
+  descOpen = !descOpen;
+  $('descText').style.maxHeight = descOpen ? 'none' : '3.3em';
+  $('descBtn').textContent = descOpen ? '간단히' : '더보기';
+}
+function descTag(t) { goHome('ALL'); $('searchInput').value = t; renderHome(); }
+
+/* ---------- 사용자 정보 팝업 ---------- */
+const USERS = {
+  ApexHunter: {bio: '유명산 와인딩 전문. 시선 처리와 브레이킹 포인트를 공유합니다.', insta: 'apex_hunter', region: '경기 가평'},
+  Shredder_KR: {bio: '파크 & 킥커 위주로 탑니다. 랜딩 자세 교정 환영!', yt: '@shredder_kr', region: '강원'},
+  WaveHunter_KR: {bio: '양양 죽도 로컬. 숏보드 세션 위주로 올립니다.', insta: 'wavehunter_kr', region: '강원 양양'},
+  CarvingMaster: {bio: '새벽 땡보딩 카빙 마니아.', tt: 'carving_master', region: '강원 정선'}
+};
+function userInfo(name) {
+  if (user && name === user.name) return Object.assign({}, prof, {self: true, nick: name, gearList: [prof.bike, prof.board, prof.surf, prof.cam, prof.protect].filter(Boolean)});
+  const all = [...videos, ...shorts, ...photos, ...lives].filter(x => x.author === name);
+  const uniq = a => [...new Set(a.filter(Boolean))];
+  return Object.assign({}, USERS[name] || {}, {nick: name, cats: uniq(all.map(x => x.cat)), base: uniq(all.map(x => x.spot)).slice(0, 3).join(', '), gearList: uniq(all.map(x => x.gear)).slice(0, 3)});
+}
+function openUser(name) {
+  const p = userInfo(name);
+  const cnt = a => a.filter(x => x.author === name).length;
+  const socials = Object.keys(SOC).filter(k => p[k]).map(k => {
+    const [ic, label, fn] = SOC[k], u = fn(p[k]), cls = 'inline-flex items-center gap-1 text-[11px] font-semibold bg-zinc-800 px-2.5 py-1 rounded-lg';
+    return u ? `<a href="${esc(u)}" target="_blank" rel="noopener noreferrer" class="${cls} hover:bg-orange-500">${ic} ${label}</a>` : `<span class="${cls}">${ic} ${label}</span>`;
+  });
+  $('userCard').innerHTML = `
+    <div class="flex items-center gap-3"><div class="w-14 h-14 rounded-full bg-gradient-to-br from-orange-500 to-red-600 flex items-center justify-center text-2xl font-black">${esc(name.charAt(0).toUpperCase())}</div>
+      <div class="min-w-0"><h3 class="font-extrabold text-base truncate">${esc(name)}${p.self ? ' <span class="text-[10px] bg-orange-500 px-1.5 py-0.5 rounded align-middle">나</span>' : ''}</h3><p class="text-[11px] text-zinc-400">${p.region ? '📍 ' + esc(p.region) : '활동 지역 미설정'}</p></div></div>
+    <p class="text-xs text-zinc-300 whitespace-pre-line">${p.bio ? esc(p.bio) : '<span class="text-zinc-600">아직 소개말이 없습니다.</span>'}</p>
+    ${(p.cats || []).length ? `<div class="flex flex-wrap gap-1.5">${p.cats.map(c => `<span class="text-[10px] font-bold px-2 py-0.5 rounded ${CATS[c].cls}">${CATS[c].icon} ${CATS[c].name}</span>`).join('')}</div>` : ''}
+    ${p.base ? `<div><p class="text-[11px] font-bold text-zinc-500 mb-1.5">📍 주 베이스</p><div class="flex flex-wrap gap-1.5">${p.base.split(',').map(x => x.trim()).filter(Boolean).slice(0, 3).map(x => `<span class="text-[11px] bg-zinc-950 border border-zinc-800 px-2.5 py-1 rounded-lg">${esc(x)}</span>`).join('')}</div></div>` : ''}
+    ${p.gearList.length ? `<div><p class="text-[11px] font-bold text-zinc-500 mb-1.5">🛠️ 장비</p><div class="space-y-1.5 text-xs">${p.gearList.map(g => `<div class="bg-zinc-950/80 border border-zinc-800 rounded-lg px-2.5 py-1.5">${esc(g)}</div>`).join('')}</div></div>` : ''}
+    ${socials.length ? `<div><p class="text-[11px] font-bold text-zinc-500 mb-1.5">🔗 소셜</p><div class="flex flex-wrap gap-1.5">${socials.join('')}</div></div>` : ''}
+    <div class="flex gap-4 pt-3 border-t border-zinc-800 text-xs text-zinc-400"><span>🎬 영상 <b class="text-orange-400">${cnt(videos)}</b></span><span>⚡ 쇼츠 <b class="text-orange-400">${cnt(shorts)}</b></span><span>📸 사진 <b class="text-orange-400">${cnt(photos)}</b></span></div>
+    <div class="flex gap-2"><button onclick="viewUserContent(this.dataset.u)" data-u="${esc(name)}" class="flex-1 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold py-2.5 rounded-xl">콘텐츠 보기</button>${p.self ? `<button onclick="closeUser();goProfile()" class="px-4 bg-zinc-800 hover:bg-zinc-700 text-xs font-bold rounded-xl">⚙️ 설정</button>` : ''}</div>`;
+  $('userModal').classList.remove('hidden'); $('userModal').classList.add('flex');
+}
+function closeUser() { $('userModal').classList.add('hidden'); $('userModal').classList.remove('flex'); }
+function viewUserContent(name) { closeUser(); closeLB(); goHome('ALL'); $('searchInput').value = name; renderHome(); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeUser(); });
+
+renderAuth(); initSb();
+
+goHome('ALL');
+</script>
+</body>
+</html>
